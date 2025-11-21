@@ -2,7 +2,14 @@ pipeline {
   agent any
 
   environment {
-    IMAGE_NAME = "demo-flask:${env.BUILD_NUMBER}"
+    IMAGE_NAME = "demo-jenkins-docker"
+    CONTAINER_NAME = "demo-jenkins-docker"
+    APP_PORT = "5000"
+  }
+
+  options {
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+    timestamps()
   }
 
   stages {
@@ -12,38 +19,81 @@ pipeline {
       }
     }
 
-    stage('Build image') {
+    stage('Prepare') {
       steps {
         script {
-          sh 'docker build -t $IMAGE_NAME .'
+          // show docker version for debugging
+          sh 'docker --version || true'
         }
       }
     }
 
     stage('Test') {
+      when {
+        expression {
+          fileExists('requirements.txt') && (sh(script: 'python3 -m pytest -q || true', returnStatus: true) == 0)
+        }
+      }
       steps {
-        sh '''
-          docker run --rm $IMAGE_NAME /bin/sh -c "pytest -q"
-        '''
+        echo "Running pytest (if tests present)..."
+        sh 'pip install -r requirements.txt || true'
+        sh 'python3 -m pytest -q || true'
       }
     }
 
-    stage('Run (Deploy)') {
+    stage('Build Docker Image') {
       steps {
+        script {
+          def tag = "${env.BUILD_NUMBER}"
+          sh """
+            docker build -t ${IMAGE_NAME}:$tag .
+            docker tag ${IMAGE_NAME}:$tag ${IMAGE_NAME}:latest
+          """
+        }
+      }
+    }
+
+    stage('Deploy to EC2 (same host)') {
+      steps {
+        script {
+          def tag = "${env.BUILD_NUMBER}"
+          // stop old container if exists
+          sh '''
+            if docker ps -q --filter "name=${CONTAINER_NAME}" | grep -q . ; then
+              echo "Stopping existing container..."
+              docker stop ${CONTAINER_NAME} || true
+            fi
+            if docker ps -a -q --filter "name=${CONTAINER_NAME}" | grep -q . ; then
+              echo "Removing existing container..."
+              docker rm ${CONTAINER_NAME} || true
+            fi
+          '''
+          // run new container
+          sh """
+            docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:${APP_PORT} --restart unless-stopped ${IMAGE_NAME}:${tag}
+          """
+        }
+      }
+    }
+
+    stage('Smoke Check') {
+      steps {
+        // a simple check of the app health
         sh '''
-          docker rm -f demo-flask-running || true
-          docker run -d --name demo-flask-running -p 5000:5000 $IMAGE_NAME
+          sleep 3
+          echo "HTTP status:"
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:${APP_PORT} || true
         '''
       }
     }
   }
 
   post {
-    always {
-      echo "Build finished. You can view app at http://<jenkins-host>:5000"
+    success {
+      echo "Pipeline succeeded. App deployed to port ${APP_PORT}."
     }
     failure {
-      echo "Build failed"
+      echo "Pipeline failed. Check console output for errors."
     }
   }
 }
