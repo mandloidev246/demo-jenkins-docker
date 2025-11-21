@@ -51,6 +51,7 @@ pipeline {
 
     stage('Health Check') {
       steps {
+        // a simple check of the app health
         sh '''
           sleep 3
           curl -s -o /dev/null -w "%{http_code}" http://localhost:5000 || true
