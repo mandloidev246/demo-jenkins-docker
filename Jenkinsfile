@@ -2,48 +2,69 @@ pipeline {
   agent any
 
   environment {
-    IMAGE_NAME = "demo-flask:${env.BUILD_NUMBER}"
+    IMAGE_NAME = "demo-jenkins-docker"
+    CONTAINER_NAME = "demo-jenkins-docker"
+    APP_PORT = "5000"
   }
 
   stages {
+
     stage('Checkout') {
       steps {
         checkout scm
       }
     }
 
-    stage('Build image') {
+    stage('Build Docker Image') {
       steps {
         script {
-          sh 'docker build -t $IMAGE_NAME .'
+          def tag = "${env.BUILD_NUMBER}"
+          sh """
+            docker build -t ${IMAGE_NAME}:${tag} .
+            docker tag ${IMAGE_NAME}:${tag} ${IMAGE_NAME}:latest
+          """
         }
       }
     }
 
-    stage('Test') {
+    stage('Deploy to EC2') {
       steps {
-        sh '''
-          docker run --rm $IMAGE_NAME /bin/sh -c "pytest -q"
-        '''
+        script {
+          def tag = "${env.BUILD_NUMBER}"
+
+          sh '''
+            if docker ps -q --filter "name=demo-jenkins-docker" | grep -q . ; then
+              docker stop demo-jenkins-docker || true
+            fi
+
+            if docker ps -a -q --filter "name=demo-jenkins-docker" | grep -q . ; then
+              docker rm demo-jenkins-docker || true
+            fi
+          '''
+
+          sh """
+            docker run -d --name demo-jenkins-docker -p 5000:5000 --restart unless-stopped ${IMAGE_NAME}:${tag}
+          """
+        }
       }
     }
 
-    stage('Run (Deploy)') {
+    stage('Health Check') {
       steps {
         sh '''
-          docker rm -f demo-flask-running || true
-          docker run -d --name demo-flask-running -p 5000:5000 $IMAGE_NAME
+          sleep 3
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:5000 || true
         '''
       }
     }
   }
 
   post {
-    always {
-      echo "Build finished. You can view app at http://<jenkins-host>:5000"
+    success {
+      echo "Deployment successful!"
     }
     failure {
-      echo "Build failed"
+      echo "Deployment failed. Check logs!"
     }
   }
 }
