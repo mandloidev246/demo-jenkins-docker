@@ -1,4 +1,4 @@
-🚀 CI/CD Pipeline Automation using Jenkins & Docker
+🚀 CI/CD Pipeline Automation using Jenkins & Docker!
 
 This project implements a complete CI/CD pipeline using Jenkins, Docker, GitHub Webhooks, and AWS EC2.
 Every code push to GitHub automatically triggers Jenkins to build, test, containerize, and deploy the application to an EC2 instance.
