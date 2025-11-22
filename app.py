@@ -3,7 +3,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def hello():
-    return "Hello CI/CD from new Jenkins setup!!"
+    return "Hello CI/CD from t3.small!"
 
 
 
