@@ -1,2 +1,0 @@
-"CI test"
-"Final try"
