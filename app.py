@@ -3,7 +3,8 @@ app = Flask(__name__)
 
 @app.route("/")
 def hello():
-    return "CI/CD working again! Yayy!! 🚀"
+    return "Hello CI/CD from new Jenkins setup!"
+
 
 
 if __name__ == "__main__":
